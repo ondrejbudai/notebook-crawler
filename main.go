@@ -1,51 +1,70 @@
 package main
 
 import (
-	"encoding/csv"
-	"log"
-	"os"
+	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/gocolly/colly"
 )
 
 func main() {
-	fName := "xkcd_store_items.csv"
-	file, err := os.Create(fName)
-	if err != nil {
-		log.Fatalf("Cannot create file %q: %s\n", fName, err)
-		return
-	}
-	defer file.Close()
-	writer := csv.NewWriter(file)
-	defer writer.Flush()
-	// Write CSV header
-	writer.Write([]string{"Name", "Price", "URL", "Image URL"})
+	incomputer()
+	gigacomputer()
+}
 
+func incomputer() {
 	// Instantiate default collector
 	c := colly.NewCollector(
 		// Allow requests only to store.xkcd.com
-		colly.AllowedDomains("store.xkcd.com"),
+		colly.AllowedDomains("www.incomputer.cz"),
 	)
-
 	// Extract product details
-	c.OnHTML(".product-grid-item", func(e *colly.HTMLElement) {
-		writer.Write([]string{
-			e.ChildAttr("a", "title"),
-			e.ChildText("span"),
-			e.Request.AbsoluteURL(e.ChildAttr("a", "href")),
-			"https" + e.ChildAttr("img", "src"),
-		})
-	})
+	c.OnHTML(".product", func(e *colly.HTMLElement) {
+		rawPrice := e.ChildText(".view-price b")
+		// \xc2\xa0 is non-breakable space
+		priceStr := strings.ReplaceAll(strings.ReplaceAll(rawPrice, "Kč", ""), "\xc2\xa0", "")
+		price, _ := strconv.Atoi(priceStr)
 
+		if price < 6000 || price > 10000 {
+			return
+		}
+		name := e.ChildText("h3 a")
+		desc := e.ChildText(".description")
+
+		fmt.Println(name, "|", price, "|", desc)
+	})
 	// Find and visit next page links
-	c.OnHTML(`.next a[href]`, func(e *colly.HTMLElement) {
+	c.OnHTML(`a[href].ico-next`, func(e *colly.HTMLElement) {
 		e.Request.Visit(e.Attr("href"))
 	})
+	c.Visit("https://www.incomputer.cz/inshop/scripts/search.aspx?q=thinkpad")
+}
 
-	c.Visit("https://store.xkcd.com/collections/everything")
+func gigacomputer() {
+	// Instantiate default collector
+	c := colly.NewCollector(
+		// Allow requests only to store.xkcd.com
+		colly.AllowedDomains("www.gigacomputer.cz"),
+	)
+	// Extract product details
+	c.OnHTML(".product", func(e *colly.HTMLElement) {
+		rawPrice := e.ChildText(".price")
+		// \xc2\xa0 is non-breakable space
+		priceStr := strings.ReplaceAll(strings.Split(rawPrice, ",")[0], "\xc2\xa0", "")
+		price, _ := strconv.Atoi(priceStr)
 
-	log.Printf("Scraping finished, check file %q for results\n", fName)
+		if price < 6000 || price > 10000 {
+			return
+		}
+		name := e.ChildText("h3 a")
+		desc := e.ChildText("p")
 
-	// Display collector's statistics
-	log.Println(c)
+		fmt.Println(name, "|", price, "|", desc)
+	})
+	// Find and visit next page links
+	c.OnHTML(`.page.next a[href]`, func(e *colly.HTMLElement) {
+		e.Request.Visit(e.Attr("href"))
+	})
+	c.Visit("https://www.gigacomputer.cz/hledani/?q=thinkpad")
 }
